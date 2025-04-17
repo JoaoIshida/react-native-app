@@ -1,39 +1,59 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import React, { useEffect, useState } from 'react';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { View, ActivityIndicator } from 'react-native';
+import { auth } from '@/lib/supabase/auth';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
 
-import { useColorScheme } from '@/hooks/useColorScheme';
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
-
+// Root layout wrapper that handles auth state
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+  return (
+    <AuthProvider>
+      <RootLayoutNav />
+    </AuthProvider>
+  );
+}
+
+// Navigation component that renders different layouts based on auth state
+function RootLayoutNav() {
+  const { authSession, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
+    if (isLoading) return;
 
-  if (!loaded) {
-    return null;
+    const inAuthGroup = segments[0] === 'auth';
+    const isAuthenticated = !!authSession;
+
+    if (
+      // If user is not authenticated, redirect to login
+      !isAuthenticated &&
+      !inAuthGroup
+    ) {
+      router.replace('/auth/login');
+    } else if (
+      // If user is authenticated, redirect to home if they're on an auth screen
+      isAuthenticated &&
+      inAuthGroup
+    ) {
+      router.replace('/');
+    }
+  }, [authSession, segments, isLoading]);
+
+  // Show loading indicator while checking auth state
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
   }
 
+  // Render the app with different layouts based on authentication state
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="auth" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    </Stack>
   );
 }

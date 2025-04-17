@@ -7,18 +7,23 @@ import { Platform } from 'react-native';
 import supabase from './createClient';
 import { debugLog } from './debug';
 import Constants from 'expo-constants';
+import { EXPO_CLIENT_ID, IOS_CLIENT_ID, ANDROID_CLIENT_ID, WEB_CLIENT_ID } from '@env';
 
 // Register the WebBrowser for authentication sessions
 WebBrowser.maybeCompleteAuthSession();
 
 const getRedirectUri = () => {
-    // For standalone apps
-    if (Constants.appOwnership === 'standalone') {
-        return `${Constants.expoConfig.scheme}://`;
+    if (Constants.appOwnership === 'expo') {
+        // For Expo Go
+        return `https://auth.expo.io/@joaoishida/react-native-app`;
+    } else {
+        // For standalone apps
+        return Platform.select({
+            ios: `rna://`,
+            android: `rna://`,
+            web: `rna://`,
+        });
     }
-
-    // For Expo Go
-    return `${Constants.expoConfig.scheme}://` || 'rna://';
 };
 
 export const auth = {
@@ -30,10 +35,10 @@ export const auth = {
      */
     useGoogleAuth: () => {
         return Google.useAuthRequest({
-            expoClientId: 'EXPO_CLIENT_ID', // For Expo Go
-            iosClientId: 'IOS_CLIENT_ID', // For iOS standalone app - com.joaoishida.rna
-            androidClientId: 'ANDROID_CLIENT_ID', // For Android standalone app - com.joaoishida.rna
-            webClientId: 'WEB_CLIENT_ID', // For web
+            expoClientId: EXPO_CLIENT_ID, // For Expo Go
+            iosClientId: IOS_CLIENT_ID, // For iOS standalone app - com.joaoishida.rna
+            androidClientId: ANDROID_CLIENT_ID, // For Android standalone app - com.joaoishida.rna
+            webClientId: WEB_CLIENT_ID, // For web
             redirectUri: getRedirectUri(),
         });
     },

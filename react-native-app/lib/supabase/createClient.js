@@ -2,7 +2,6 @@ import { Platform } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@env';
 import { ExpoSecureStoreAdapter } from './storage';
-import { DEBUG, debugLog, setupFetchInterceptors } from './debug';
 
 export const createSupabaseClient = () => {
     const supabase = createClient(
