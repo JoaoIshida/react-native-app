@@ -24,10 +24,10 @@ export const createSupabaseClient = () => {
     );
 
     // Set up debugging if in development mode
-    if (DEBUG) {
-        supabase.realtime.setEndpoint(`${SUPABASE_URL}/realtime/v1`).setAuth(SUPABASE_ANON_KEY);
-        setupFetchInterceptors();
-    }
+    // if (DEBUG) {
+    //     supabase.realtime.setEndpoint(`${SUPABASE_URL}/realtime/v1`).setAuth(SUPABASE_ANON_KEY);
+    //     setupFetchInterceptors();
+    // }
 
     return supabase;
 };
