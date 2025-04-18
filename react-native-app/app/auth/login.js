@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -14,13 +14,24 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
+import { auth } from '@/lib/supabase/auth';
+
+// Import GoogleSigninButton conditionally for native platforms
+let GoogleSigninButton = null;
+if (Platform.OS !== 'web') {
+    try {
+        const { GoogleSigninButton: GSB } = require('@react-native-google-signin/google-signin');
+        GoogleSigninButton = GSB;
+    } catch (error) {
+        console.error('Failed to import GoogleSigninButton:', error);
+    }
+}
 
 const LoginScreen = () => {
     const router = useRouter();
-    const { signIn, signUp, signInWithGoogle, useGoogleAuth } = useAuth();
+    const { signIn, signUp } = useAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -28,62 +39,33 @@ const LoginScreen = () => {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
 
-    // Initialize Google Auth
-    const [request, response, promptAsync] = useGoogleAuth();
-
+    // Initialize Google Sign-In on component mount
     useEffect(() => {
-        // Handle deep links for email verification and password reset
-        const handleDeepLink = async (event) => {
-            const { url } = event;
-            if (url) {
-                // Pass the URL to the auth module to handle authentication links
-                const { auth } = await import('@/lib/supabase/auth');
-                const result = await auth.handleAuthDeepLink(url);
-
-                if (result && result.type === 'signup') {
-                    Alert.alert('Success', 'Your email has been verified. You can now log in.');
-                } else if (result && result.type === 'recovery') {
-                    router.push('/auth/reset-password');
-                }
-            }
-        };
-
-        // Set up deep link listener
-        const subscription = Linking.addEventListener('url', handleDeepLink);
-
-        // Check for initial URL (app opened from deep link)
-        Linking.getInitialURL().then(url => {
-            if (url) {
-                handleDeepLink({ url });
-            }
-        });
-
-        return () => {
-            subscription.remove();
-        };
+        auth.initGoogleSignIn();
     }, []);
 
-    // Handle Google Sign In response
-    useEffect(() => {
-        if (response?.type === 'success') {
-            setGoogleLoading(true);
-            handleGoogleSignIn(response.authentication.accessToken);
-        }
-    }, [response]);
-
-    const handleGoogleSignIn = async (accessToken) => {
+    const handleGoogleSignIn = async () => {
         try {
-            const { error } = await signInWithGoogle(accessToken);
-            setGoogleLoading(false);
+            setGoogleLoading(true);
+            console.log("Starting Google sign-in process");
 
-            if (error) {
-                Alert.alert('Error', error.message);
+            const result = await auth.signInWithGoogle();
+
+            // Only update state if we're not redirecting
+            if (Platform.OS !== 'web') {
+                setGoogleLoading(false);
+
+                if (result.error) {
+                    console.error("Google sign in error:", result.error);
+                    Alert.alert('Sign In Error', result.error.message || 'Failed to sign in with Google. Please try again.');
+                } else {
+                    console.log("Google sign in successful");
+                }
             }
-            // No need to navigate - the auth context will handle that
         } catch (error) {
+            console.error('Google sign in exception:', error);
             setGoogleLoading(false);
-            Alert.alert('Error', 'Failed to sign in with Google. Please try again.');
-            console.error('Google sign in error:', error);
+            Alert.alert('Error', 'An unexpected error occurred. Please try again.');
         }
     };
 
@@ -118,7 +100,6 @@ const LoginScreen = () => {
                 );
                 setIsLogin(true); // Switch back to login view
             }
-            // No need to navigate - the auth context will handle that
         } catch (error) {
             Alert.alert('Error', 'An unexpected error occurred. Please try again.');
             console.error('Auth error:', error);
@@ -136,7 +117,6 @@ const LoginScreen = () => {
         setLoading(true);
 
         try {
-            const { auth } = await import('@/lib/supabase/auth');
             const { error } = await auth.resetPassword(email);
 
             if (error) {
@@ -152,6 +132,42 @@ const LoginScreen = () => {
             console.error('Reset password error:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Render Google button based on platform
+    const renderGoogleButton = () => {
+        if (Platform.OS !== 'web' && GoogleSigninButton) {
+            // Native platforms - use the native Google button
+            return (
+                <GoogleSigninButton
+                    style={styles.googleNativeButton}
+                    size={GoogleSigninButton.Size.Wide}
+                    color={GoogleSigninButton.Color.Light}
+                    onPress={handleGoogleSignIn}
+                    disabled={googleLoading}
+                />
+            );
+        } else {
+            // Web or fallback for native
+            return (
+                <TouchableOpacity
+                    style={styles.googleButton}
+                    onPress={handleGoogleSignIn}
+                    disabled={googleLoading}
+                >
+                    {googleLoading ? (
+                        <ActivityIndicator color="#333" />
+                    ) : (
+                        <>
+                            <Ionicons name="logo-google" size={24} color="#333" style={styles.googleIcon} />
+                            <Text style={styles.googleButtonText}>
+                                Continue with Google
+                            </Text>
+                        </>
+                    )}
+                </TouchableOpacity>
+            );
         }
     };
 
@@ -236,24 +252,7 @@ const LoginScreen = () => {
                             <View style={styles.separator} />
                         </View>
 
-                        <TouchableOpacity
-                            style={styles.googleButton}
-                            onPress={() => {
-                                promptAsync();
-                            }}
-                            disabled={!request || googleLoading}
-                        >
-                            {googleLoading ? (
-                                <ActivityIndicator color="#333" />
-                            ) : (
-                                <>
-                                    <Ionicons name="logo-google" size={24} color="#333" style={styles.googleIcon} />
-                                    <Text style={styles.googleButtonText}>
-                                        Continue with Google
-                                    </Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
+                        {renderGoogleButton()}
                     </View>
 
                     <View style={styles.switchContainer}>
@@ -374,6 +373,11 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#ddd',
     },
+    googleNativeButton: {
+        width: '100%',
+        height: 48,
+        alignSelf: 'center',
+    },
     googleIcon: {
         marginRight: 8,
     },
@@ -399,5 +403,4 @@ const styles = StyleSheet.create({
     },
 });
 
-// Export the component as default
 export default LoginScreen;

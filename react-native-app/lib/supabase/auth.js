@@ -1,94 +1,214 @@
-// src/lib/supabase/auth.js
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
 import { Platform } from 'react-native';
 import supabase from './createClient';
 import { debugLog } from './debug';
-import Constants from 'expo-constants';
 import { EXPO_CLIENT_ID, IOS_CLIENT_ID, ANDROID_CLIENT_ID, WEB_CLIENT_ID } from '@env';
 
-// Register the WebBrowser for authentication sessions
-WebBrowser.maybeCompleteAuthSession();
-
-const getRedirectUri = () => {
-    if (Constants.appOwnership === 'expo') {
-        // For Expo Go
-        return `https://auth.expo.io/@joaoishida/react-native-app`;
-    } else {
-        // For standalone apps
-        return Platform.select({
-            ios: `rna://`,
-            android: `rna://`,
-            web: `rna://`,
-        });
+// Import GoogleSignin conditionally for native platforms
+let GoogleSignin = null;
+if (Platform.OS !== 'web') {
+    try {
+        const { GoogleSignin: GS } = require('@react-native-google-signin/google-signin');
+        GoogleSignin = GS;
+    } catch (error) {
+        console.error('Failed to import GoogleSignin:', error);
     }
-};
+}
 
 export const auth = {
     /**
-     * @returns {Object} - Google auth hook result
-     * 
-     * @example
-     * const [request, response, promptAsync] = auth.useGoogleAuth();
+     * Initialize Google Sign-In
      */
-    useGoogleAuth: () => {
-        return Google.useAuthRequest({
-            expoClientId: EXPO_CLIENT_ID, // For Expo Go
-            iosClientId: IOS_CLIENT_ID, // For iOS standalone app - com.joaoishida.rna
-            androidClientId: ANDROID_CLIENT_ID, // For Android standalone app - com.joaoishida.rna
-            webClientId: WEB_CLIENT_ID, // For web
-            redirectUri: getRedirectUri(),
-        });
-    },
-
-    /**
-     * Sign in with Google
-     * 
-     * @param {Object} accessToken - Access token from Google auth
-     * @returns {Promise} - Sign in result
-     * 
-     * @example
-     * // Get the token from Google auth response
-     * const { authentication } = response;
-     * const { data, error } = await auth.signInWithGoogle(authentication.accessToken);
-     */
-    signInWithGoogle: async (accessToken) => {
-        debugLog('Attempting to sign in with Google');
-
-        const { data, error } = await supabase.auth.signInWithIdToken({
-            provider: 'google',
-            token: accessToken,
-        });
-
-        if (error) {
-            debugLog('Google sign in error:', error.message);
-        } else {
-            debugLog('Google sign in successful for user:', data.user.id);
-
-            if (data.user) {
-                try {
-                    await AsyncStorage.setItem('lastSignIn', new Date().toISOString());
-                    await AsyncStorage.setItem('userEmail', data.user.email);
-                    await AsyncStorage.setItem('authProvider', 'google');
-                } catch (e) {
-                    debugLog('Error storing user info', e);
-                }
-            }
+    initGoogleSignIn: () => {
+        if (Platform.OS === 'web') {
+            return; // No initialization needed for web
         }
 
-        return { data, error };
+        if (GoogleSignin) {
+            GoogleSignin.configure({
+                webClientId: WEB_CLIENT_ID, // Required for getting the idToken
+                iosClientId: IOS_CLIENT_ID,
+                androidClientId: ANDROID_CLIENT_ID,
+                scopes: ['profile', 'email'],
+                offlineAccess: false, // Don't need offline access for this implementation
+            });
+            console.log('Google Sign-In configured for native platform');
+        } else {
+            console.error('GoogleSignin is not available');
+        }
     },
 
     /**
-     * Sign up with email verification
-     * @param {string} email - User's email
-     * @param {string} password - User's password
-     * @returns {Promise} - Sign up result
-     * 
-     * @example
-     * const { data, error } = await auth.signUpWithEmail('user@example.com', 'password123');
+     * Sign in with Google - Platform-specific implementation
+     */
+    signInWithGoogle: async () => {
+        debugLog('Attempting to sign in with Google');
+
+        try {
+            if (Platform.OS === 'web') {
+                // For web, use Supabase's built-in OAuth flow
+                console.log('Starting web Google OAuth flow');
+                const { data, error } = await supabase.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: {
+                        redirectTo: window.location.origin,
+                        queryParams: {
+                            prompt: 'consent'  // This forces Google to show the consent screen again
+                        }
+                    }
+                });
+
+                if (error) {
+                    console.error('Supabase OAuth error:', error);
+                    return { data: null, error };
+                }
+
+                return { data, error: null };
+            } else {
+                // For native platforms, use GoogleSignin
+                if (!GoogleSignin) {
+                    console.error('GoogleSignin is not available');
+                    return {
+                        data: null,
+                        error: new Error('Google Sign-In is not available on this platform')
+                    };
+                }
+
+                // Check if play services are available (Android only)
+                if (Platform.OS === 'android') {
+                    await GoogleSignin.hasPlayServices();
+                }
+
+                console.log('Starting native Google Sign-In flow');
+                const userInfo = await GoogleSignin.signIn();
+                console.log('Google Sign-In successful, got user info');
+
+                // Get the ID token
+                const idToken = userInfo.idToken;
+                if (!idToken) {
+                    console.error('No ID token present in Google response');
+                    return {
+                        data: null,
+                        error: new Error('No ID token received from Google')
+                    };
+                }
+
+                console.log('Using ID token to sign in with Supabase');
+                const { data, error } = await supabase.auth.signInWithIdToken({
+                    provider: 'google',
+                    token: idToken,
+                    nonce: null, // Explicitly pass null if nonce checking is disabled
+                });
+
+                if (error) {
+                    console.error('Supabase ID token sign in error:', error);
+                    return { data: null, error };
+                }
+
+                console.log('Supabase authentication successful!');
+                debugLog('Google sign in successful for user:', data.user?.id || 'Unknown user');
+
+                if (data.user) {
+                    try {
+                        await AsyncStorage.setItem('lastSignIn', new Date().toISOString());
+                        await AsyncStorage.setItem('userEmail', data.user.email);
+                        await AsyncStorage.setItem('authProvider', 'google');
+                    } catch (e) {
+                        debugLog('Error storing user info', e);
+                    }
+                }
+
+                return { data, error: null };
+            }
+        } catch (error) {
+            console.error('Exception during Google sign in:', error);
+            return { data: null, error };
+        }
+    },
+
+    /**
+     * Check if user has previously signed in
+     */
+    hasPreviousSignIn: async () => {
+        if (Platform.OS === 'web') {
+            // For web, check session
+            const { data } = await supabase.auth.getSession();
+            return !!data?.session;
+        } else if (GoogleSignin) {
+            // For native platforms
+            return GoogleSignin.hasPreviousSignIn();
+        }
+        return false;
+    },
+
+    /**
+     * Get the current user session with improved handling for OAuth redirects
+     */
+    getSession: async () => {
+        debugLog('Getting current session');
+
+        try {
+            // For web platforms, handle hash fragments that contain auth tokens
+            if (Platform.OS === 'web' && window.location.hash) {
+                const hash = window.location.hash;
+
+                if (hash.includes('access_token') || hash.includes('error')) {
+                    console.log('Hash contains auth parameters, fetching fresh session');
+
+                    // Extract the hash without the # character
+                    const hashParams = window.location.hash.substring(1);
+
+                    // Parse the parameters
+                    const params = new URLSearchParams(hashParams);
+                    const accessToken = params.get('access_token');
+                    const refreshToken = params.get('refresh_token');
+
+                    if (accessToken) {
+                        console.log('Setting session from hash parameters');
+                        // Manually set the session
+                        try {
+                            const result = await supabase.auth.setSession({
+                                access_token: accessToken,
+                                refresh_token: refreshToken || '',
+                            });
+
+                            // Clear the hash
+                            if (window.history && window.history.replaceState) {
+                                window.history.replaceState(
+                                    null,
+                                    document.title,
+                                    window.location.pathname + window.location.search
+                                );
+                            }
+
+                            return result;
+                        } catch (e) {
+                            console.error('Error setting session from hash:', e);
+                        }
+                    }
+                }
+            }
+
+            // Standard session retrieval
+            const { data, error } = await supabase.auth.getSession();
+
+            if (error) {
+                debugLog('Error getting session:', error.message);
+            } else if (data?.session) {
+                debugLog('Session successfully retrieved for user:', data.session.user.id);
+            } else {
+                debugLog('No active session found');
+            }
+
+            return { data, error };
+        } catch (error) {
+            debugLog('Exception getting session:', error);
+            return { data: null, error };
+        }
+    },
+
+    /**
+     * Sign up with email and password
      */
     signUpWithEmail: async (email, password) => {
         debugLog('Attempting to sign up:', email);
@@ -97,8 +217,7 @@ export const auth = {
             email,
             password,
             options: {
-                // This will send a verification email
-                emailRedirectTo: `rna://verify-email`,
+                emailRedirectTo: `${Platform.OS === 'web' ? window.location.origin : 'rna'}://verify-email`,
             },
         });
 
@@ -119,14 +238,7 @@ export const auth = {
     },
 
     /**
-     * Sign in with email and password (once verified)
-     * 
-     * @param {string} email - User's email
-     * @param {string} password - User's password
-     * @returns {Promise} - Sign in result
-     * 
-     * @example
-     * const { data, error } = await auth.signInWithEmail('user@example.com', 'password123');
+     * Sign in with email and password
      */
     signInWithEmail: async (email, password) => {
         debugLog('Attempting to sign in with email:', email);
@@ -157,14 +269,19 @@ export const auth = {
 
     /**
      * Sign out the current user
-     * 
-     * @returns {Promise} - Sign out result
-     * 
-     * @example
-     * const { error } = await auth.signOut();
      */
     signOut: async () => {
         debugLog('Attempting to sign out');
+
+        // For native platforms, also sign out from Google
+        if (Platform.OS !== 'web' && GoogleSignin) {
+            try {
+                await GoogleSignin.signOut();
+                console.log('Signed out from Google');
+            } catch (error) {
+                console.error('Error signing out from Google:', error);
+            }
+        }
 
         const { error } = await supabase.auth.signOut();
 
@@ -189,55 +306,17 @@ export const auth = {
     },
 
     /**
-     * Get the current user session
-     * 
-     * @returns {Promise} - Current session
-     * 
-     * @example
-     * const { data, error } = await auth.getSession();
-     */
-    getSession: async () => {
-        debugLog('Getting current session');
-        return await supabase.auth.getSession();
-    },
-
-    /**
-     * Get the current user
-     * 
-     * @returns {Promise} - Current user
-     * 
-     * @example
-     * const { data, error } = await auth.getUser();
-     */
-    getUser: async () => {
-        debugLog('Getting current user');
-        return await supabase.auth.getUser();
-    },
-
-    /**
      * Reset password for a user
-     * 
-     * @param {string} email - User's email
-     * @returns {Promise} - Reset password result
-     * 
-     * @example
-     * const { data, error } = await auth.resetPassword('user@example.com');
      */
     resetPassword: async (email) => {
         debugLog('Requesting password reset for:', email);
         return await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `rna://reset-password`,
+            redirectTo: `${Platform.OS === 'web' ? window.location.origin + '/auth/reset-password' : 'rna://reset-password'}`,
         });
     },
 
     /**
      * Update a user's password
-     * 
-     * @param {string} newPassword - New password
-     * @returns {Promise} - Update password result
-     * 
-     * @example
-     * const { data, error } = await auth.updatePassword('newPassword123');
      */
     updatePassword: async (newPassword) => {
         debugLog('Updating password');
@@ -248,34 +327,13 @@ export const auth = {
 
     /**
      * Set up auth state change listener
-     * 
-     * @param {Function} callback - Function to call when auth state changes
-     * @returns {Function} - Unsubscribe function
-     * 
-     * @example
-     * const unsubscribe = auth.onAuthStateChange((event, session) => {
-     *   if (event === 'SIGNED_IN') console.log('User signed in!');
-     *   if (event === 'SIGNED_OUT') console.log('User signed out!');
-     * });
-     * 
-     * // Clean up subscription when component unmounts
-     * return () => unsubscribe();
      */
     onAuthStateChange: (callback) => {
         return supabase.auth.onAuthStateChange(callback);
     },
 
     /**
-     * Check if a deep link is an auth link and process it
-     * 
-     * @param {string} url - The URL from the deep link
-     * @returns {Promise} - Auth result or null if not an auth link
-     * 
-     * @example
-     * // In your deep link handler
-     * Linking.addEventListener('url', ({ url }) => {
-     *   auth.handleAuthDeepLink(url);
-     * });
+     * Handle auth deep links
      */
     handleAuthDeepLink: async (url) => {
         try {

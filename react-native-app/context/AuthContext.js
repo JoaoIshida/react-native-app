@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth } from '@/lib/supabase/auth';
 import { debugLog } from '@/lib/supabase/debug';
+import { Platform } from 'react-native';
+import supabase from '@/lib/supabase/createClient';
 
 // Create a context to manage authentication state
 const AuthContext = createContext({
@@ -10,8 +12,6 @@ const AuthContext = createContext({
     signIn: async () => { },
     signUp: async () => { },
     signOut: async () => { },
-    signInWithGoogle: async () => { },
-    useGoogleAuth: () => { },
 });
 
 // Provider component that wraps your app and makes auth object available
@@ -27,12 +27,16 @@ export function AuthProvider({ children }) {
                 // Get the current session
                 const { data } = await auth.getSession();
 
+                console.log('Session data:', data ? 'Available' : 'None',
+                    'User:', data?.session?.user?.email || 'None');
+
                 if (data?.session) {
                     setAuthSession(data.session);
                     setUser(data.session.user);
                 }
             } catch (error) {
                 debugLog('Error initializing auth:', error);
+                console.error('Error initializing auth:', error);
             } finally {
                 setIsLoading(false);
             }
@@ -43,6 +47,12 @@ export function AuthProvider({ children }) {
         // Set up auth state change listener
         const { data: { subscription } } = auth.onAuthStateChange((event, session) => {
             debugLog('Auth state changed:', event);
+            console.log('Auth State changed:', {
+                event,
+                hasSession: !!session,
+                userId: session?.user?.id,
+                userEmail: session?.user?.email
+            });
 
             setAuthSession(session);
             setUser(session?.user || null);
@@ -94,20 +104,6 @@ export function AuthProvider({ children }) {
         }
     };
 
-    // Sign in with Google
-    const signInWithGoogle = async (accessToken) => {
-        setIsLoading(true);
-        try {
-            const result = await auth.signInWithGoogle(accessToken);
-            return result;
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // Pass through the Google auth hook
-    const useGoogleAuth = auth.useGoogleAuth;
-
     // Provide the auth context to the app
     return (
         <AuthContext.Provider
@@ -118,8 +114,6 @@ export function AuthProvider({ children }) {
                 signIn,
                 signUp,
                 signOut,
-                signInWithGoogle,
-                useGoogleAuth,
             }}
         >
             {children}
