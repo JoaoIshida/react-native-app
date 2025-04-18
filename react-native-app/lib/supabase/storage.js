@@ -1,46 +1,62 @@
-// src/lib/supabase/storage.js
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { debugLog } from './debug';
 
-// Check if the current platform is web
+// Safely check if we're in a web environment AND localStorage is available
 const isWeb = Platform.OS === 'web';
+const hasLocalStorage = isWeb && typeof localStorage !== 'undefined';
 
-// Web localStorage adapter implementation
-const webLocalStorageAdapter = {
+// If localStorage isn't available, use an in-memory fallback
+const memoryStorage = {};
+
+// Web storage adapter implementation with safety checks
+const webStorageAdapter = {
     getItem: async (key) => {
         try {
-            const value = localStorage.getItem(key);
-            return value;
+            if (hasLocalStorage) {
+                return localStorage.getItem(key);
+            } else {
+                // Use in-memory fallback if localStorage isn't available
+                return memoryStorage[key] || null;
+            }
         } catch (error) {
-            debugLog('Web localStorage getItem error:', error);
+            debugLog('Web storage getItem error:', error);
             return null;
         }
     },
     setItem: async (key, value) => {
         try {
-            localStorage.setItem(key, value);
+            if (hasLocalStorage) {
+                localStorage.setItem(key, value);
+            } else {
+                // Use in-memory fallback if localStorage isn't available
+                memoryStorage[key] = value;
+            }
             return;
         } catch (error) {
-            debugLog('Web localStorage setItem error:', error);
+            debugLog('Web storage setItem error:', error);
             return null;
         }
     },
     removeItem: async (key) => {
         try {
-            localStorage.removeItem(key);
+            if (hasLocalStorage) {
+                localStorage.removeItem(key);
+            } else {
+                // Use in-memory fallback if localStorage isn't available
+                delete memoryStorage[key];
+            }
             return;
         } catch (error) {
-            debugLog('Web localStorage removeItem error:', error);
+            debugLog('Web storage removeItem error:', error);
             return null;
         }
     },
 };
 
 export const ExpoSecureStoreAdapter = isWeb
-    ? webLocalStorageAdapter
+    ? webStorageAdapter
     : {
         getItem: async (key) => {
             try {
@@ -100,11 +116,18 @@ export const storage = {
      */
     save: async (key, value) => {
         try {
+            const stringValue = JSON.stringify(value);
+
             if (isWeb) {
-                localStorage.setItem(key, JSON.stringify(value));
+                if (hasLocalStorage) {
+                    localStorage.setItem(key, stringValue);
+                } else {
+                    memoryStorage[key] = stringValue;
+                }
             } else {
-                await AsyncStorage.setItem(key, JSON.stringify(value));
+                await AsyncStorage.setItem(key, stringValue);
             }
+
             debugLog(`Data saved to storage: ${key}`);
             return { error: null };
         } catch (error) {
@@ -123,10 +146,15 @@ export const storage = {
         try {
             let value;
             if (isWeb) {
-                value = localStorage.getItem(key);
+                if (hasLocalStorage) {
+                    value = localStorage.getItem(key);
+                } else {
+                    value = memoryStorage[key] || null;
+                }
             } else {
                 value = await AsyncStorage.getItem(key);
             }
+
             const parsedValue = value ? JSON.parse(value) : null;
             return { data: parsedValue, error: null };
         } catch (error) {
@@ -144,10 +172,15 @@ export const storage = {
     remove: async (key) => {
         try {
             if (isWeb) {
-                localStorage.removeItem(key);
+                if (hasLocalStorage) {
+                    localStorage.removeItem(key);
+                } else {
+                    delete memoryStorage[key];
+                }
             } else {
                 await AsyncStorage.removeItem(key);
             }
+
             debugLog(`Data removed from storage: ${key}`);
             return { error: null };
         } catch (error) {
@@ -168,8 +201,13 @@ export const storage = {
             const valueToStore = typeof value === 'string' ? value : JSON.stringify(value);
 
             if (isWeb) {
-                // On web, we use localStorage (not secure, but it's the closest equivalent)
-                localStorage.setItem(key, valueToStore);
+                if (hasLocalStorage) {
+                    // On web, we use localStorage (not secure, but it's the closest equivalent)
+                    localStorage.setItem(key, valueToStore);
+                } else {
+                    // Use in-memory fallback
+                    memoryStorage[key] = valueToStore;
+                }
             } else {
                 // On native, we use SecureStore
                 await SecureStore.setItemAsync(key, valueToStore);
@@ -195,8 +233,11 @@ export const storage = {
             let value;
 
             if (isWeb) {
-                // On web, we use localStorage
-                value = localStorage.getItem(key);
+                if (hasLocalStorage) {
+                    value = localStorage.getItem(key);
+                } else {
+                    value = memoryStorage[key] || null;
+                }
             } else {
                 // On native, we use SecureStore
                 value = await SecureStore.getItemAsync(key);
@@ -226,8 +267,11 @@ export const storage = {
     removeSecure: async (key) => {
         try {
             if (isWeb) {
-                // On web, we use localStorage
-                localStorage.removeItem(key);
+                if (hasLocalStorage) {
+                    localStorage.removeItem(key);
+                } else {
+                    delete memoryStorage[key];
+                }
             } else {
                 // On native, we use SecureStore
                 await SecureStore.deleteItemAsync(key);
@@ -250,8 +294,11 @@ export const storage = {
     clearMultiple: async (keys) => {
         try {
             if (isWeb) {
-                // On web, we use localStorage
-                keys.forEach(key => localStorage.removeItem(key));
+                if (hasLocalStorage) {
+                    keys.forEach(key => localStorage.removeItem(key));
+                } else {
+                    keys.forEach(key => delete memoryStorage[key]);
+                }
             } else {
                 // On native, we use AsyncStorage
                 await AsyncStorage.multiRemove(keys);
