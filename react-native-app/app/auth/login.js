@@ -29,6 +29,40 @@ if (Platform.OS !== 'web') {
     }
 }
 
+// Custom alert function that works across platforms
+const showAlert = (title, message, buttons) => {
+    if (Platform.OS === 'web') {
+        // For web, use window.confirm or a custom alert implementation
+        if (buttons && buttons.length > 1) {
+            // If we have a confirmation dialog with multiple buttons
+            const confirmed = window.confirm(`${title}\n\n${message}`);
+            if (confirmed) {
+                // User clicked OK/confirm
+                const confirmButton = buttons.find(btn => btn.style === 'destructive' || btn.text === 'OK');
+                if (confirmButton && confirmButton.onPress) {
+                    confirmButton.onPress();
+                }
+            } else {
+                // User clicked Cancel
+                const cancelButton = buttons.find(btn => btn.style === 'cancel');
+                if (cancelButton && cancelButton.onPress) {
+                    cancelButton.onPress();
+                }
+            }
+        } else {
+            // Simple alert
+            window.alert(`${title}\n\n${message}`);
+            // If there's a single button with an action, call it
+            if (buttons && buttons.length === 1 && buttons[0].onPress) {
+                buttons[0].onPress();
+            }
+        }
+    } else {
+        // For native platforms, use React Native's Alert
+        Alert.alert(title, message, buttons);
+    }
+};
+
 const LoginScreen = () => {
     const router = useRouter();
     const { signIn, signUp } = useAuth();
@@ -57,7 +91,7 @@ const LoginScreen = () => {
 
                 if (result.error) {
                     console.error("Google sign in error:", result.error);
-                    Alert.alert('Sign In Error', result.error.message || 'Failed to sign in with Google. Please try again.');
+                    showAlert('Sign In Error', result.error.message || 'Failed to sign in with Google. Please try again.');
                 } else {
                     console.log("Google sign in successful");
                 }
@@ -65,13 +99,13 @@ const LoginScreen = () => {
         } catch (error) {
             console.error('Google sign in exception:', error);
             setGoogleLoading(false);
-            Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+            showAlert('Error', 'An unexpected error occurred. Please try again.');
         }
     };
 
     const handleEmailAuth = async () => {
         if (!email || !password) {
-            Alert.alert('Error', 'Please enter both email and password.');
+            showAlert('Error', 'Please enter both email and password.');
             return;
         }
 
@@ -91,17 +125,17 @@ const LoginScreen = () => {
             const { data, error } = result;
 
             if (error) {
-                Alert.alert('Error', error.message);
+                showAlert('Error', error.message);
             } else if (!isLogin && data.user && data.session === null) {
                 // Sign up successful but needs email verification
-                Alert.alert(
+                showAlert(
                     'Verification Email Sent',
                     'Please check your email to verify your account before logging in.'
                 );
                 setIsLogin(true); // Switch back to login view
             }
         } catch (error) {
-            Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+            showAlert('Error', 'An unexpected error occurred. Please try again.');
             console.error('Auth error:', error);
         } finally {
             setLoading(false);
@@ -110,7 +144,7 @@ const LoginScreen = () => {
 
     const handleForgotPassword = async () => {
         if (!email) {
-            Alert.alert('Error', 'Please enter your email address.');
+            showAlert('Error', 'Please enter your email address.');
             return;
         }
 
@@ -120,15 +154,15 @@ const LoginScreen = () => {
             const { error } = await auth.resetPassword(email);
 
             if (error) {
-                Alert.alert('Error', error.message);
+                showAlert('Error', error.message);
             } else {
-                Alert.alert(
+                showAlert(
                     'Reset Email Sent',
                     'Please check your email for instructions to reset your password.'
                 );
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to send reset email. Please try again.');
+            showAlert('Error', 'Failed to send reset email. Please try again.');
             console.error('Reset password error:', error);
         } finally {
             setLoading(false);
