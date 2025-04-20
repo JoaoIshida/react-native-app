@@ -1,8 +1,20 @@
-# Welcome to your Expo app 👋
+# Welcome to my Expo app 👋
 
+## Summary
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
-## Get started
+This app is a personal project to learn more about React Native, Expo, automated jobs, and Supabase tool options. It serves as a playground to try out new concepts and improve my skills.
+
+- I have learned how to create an app using react native and Expo for visualization and debug. 
+- I have implemented google 0auth and email confirmation for user's login and signup to my app.
+- Supabase is used to connect my auth to the app and for other parts of the project such as database, cron automated jobs, and more to come.
+
+The email template is configured in the Supabase auth page:
+![alt text](image.png)
+and will look like this when the email is sent:
+![alt text](image-1.png)
+
+## Get started (development)
 
 1. Install dependencies
 
@@ -13,33 +25,9 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 2. Start the app
 
    ```bash
-    npx expo start
+    npx start
    ```
 
-For some reason my phone could not connect with the expo. Only locally and by using the [android studio simulator](https://docs.expo.dev/workflow/android-studio-emulator/)
+For some reason my phone could not connect with the expo. Only locally (web) and by using the [android studio simulator](https://docs.expo.dev/workflow/android-studio-emulator/)
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+This project uses [file-based routing](https://docs.expo.dev/router/introduction).
