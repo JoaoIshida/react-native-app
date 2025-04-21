@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.joaoishida.rna"
+      "bundleIdentifier": "com.joaoishida.rna",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -37,6 +40,7 @@
       ]
     },
     "plugins": [
+      "@react-native-google-signin/google-signin",
       "expo-router",
       [
         "expo-splash-screen",

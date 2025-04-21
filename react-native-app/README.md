@@ -29,5 +29,6 @@ and will look like this when the email is sent:
    ```
 
 For some reason my phone could not connect with the expo. Only locally (web) and by using the [android studio simulator](https://docs.expo.dev/workflow/android-studio-emulator/)
+![alt text](image-2.png)
 
 This project uses [file-based routing](https://docs.expo.dev/router/introduction).

@@ -28,7 +28,7 @@ export const auth = {
             GoogleSignin.configure({
                 webClientId: WEB_CLIENT_ID, // Required for getting the idToken
                 iosClientId: IOS_CLIENT_ID,
-                androidClientId: ANDROID_CLIENT_ID,
+                //androidClientId: ANDROID_CLIENT_ID,
                 scopes: ['profile', 'email'],
                 offlineAccess: false, // Don't need offline access for this implementation
             });
